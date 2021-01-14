@@ -1,38 +1,38 @@
 <!DOCTYPE HTML>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <link rel="stylesheet" href="style.css">
-  </head>
-  <body>
-    <canvas id="drawCanvas" width="800" height="500" style="border:1px solid black;"></canvas>
-    <canvas id="cursorCanvas" width="800" height="500" style="border:1px solid black;"></canvas>
-    <div id="controls">
-      <div>
-        <input id="drawSize" type="range" min="1" max="50" value="5" autocomplete="off" />
-        <label for="drawSize">Pen size</label>
-      </div>
-      <div>
-        <input id="eraseSize" type="range" min="1" max="50" value="25" autocomplete="off" />
-        <label for="eraseSize">Eraser size</label>
-      </div>
-      <div>
-        <label class="checkbox">Eraser
-          <input id="eraserBox" type="checkbox" autocomplete="off" />
-          <span />
-        </label>
-      </div>
-      <div>
-        <input id="clear" type="button" value="Clear"/>
-      </div>
-      <div>
-        <input id="penColor" type="color" value="#000000" autocomplete="off" />
-      </div>
-      <div>
-        <input id="undo" type="button" value="Undo"/>
-      </div>
-    </div>
-  </body>
-  <script src="draw.js"></script>
-  <script src="client.js"></script>
+	<head>
+		<meta charset="utf-8">
+		<link rel="stylesheet" href="style.css">
+	</head>
+	<body>
+		<canvas id="drawCanvas" width="800" height="500" style="border:1px solid black;"></canvas>
+		<canvas id="cursorCanvas" width="800" height="500" style="border:1px solid black;"></canvas>
+		<div id="controls">
+			<div>
+				<input id="drawSize" type="range" min="1" max="50" value="5" autocomplete="off" />
+				<label for="drawSize">Pen size</label>
+			</div>
+			<div>
+				<input id="eraseSize" type="range" min="1" max="50" value="25" autocomplete="off" />
+				<label for="eraseSize">Eraser size</label>
+			</div>
+			<div>
+				<label class="checkbox">Eraser
+					<input id="eraserBox" type="checkbox" autocomplete="off" />
+					<span />
+				</label>
+			</div>
+			<div>
+				<input id="clear" type="button" value="Clear"/>
+			</div>
+			<div>
+				<input id="penColor" type="color" value="#000000" autocomplete="off" />
+			</div>
+			<div>
+				<input id="undo" type="button" value="Undo"/>
+			</div>
+		</div>
+	</body>
+	<script src="draw.js"></script>
+	<script src="client.js"></script>
 </html>
