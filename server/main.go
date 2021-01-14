@@ -3,11 +3,11 @@ package main
 import (
 	"log"
 	"os"
-//	"image/png"
-	"image"
-	"golang.org/x/image/vector"
-	"net/http"
+	//	"image/png"
 	"github.com/gorilla/websocket"
+	"golang.org/x/image/vector"
+	"image"
+	"net/http"
 	"time"
 )
 
@@ -18,7 +18,7 @@ var upgrader = websocket.Upgrader{
 	EnableCompression: false,
 }
 
-func handler(addClient, removeClient chan *Client, recv chan Packet) func(http.ResponseWriter, *http.Request)  {
+func handler(addClient, removeClient chan *Client, recv chan Packet) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -75,7 +75,7 @@ type Client struct {
 
 type Packet struct {
 	Client *Client
-	Data []byte
+	Data   []byte
 }
 
 func main() {
