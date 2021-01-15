@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"github.com/gorilla/websocket"
-	"golang.org/x/image/vector"
+	"github.com/llgcode/draw2d/draw2dimg"
 	"image"
 	"image/color"
 	"image/draw"
@@ -22,8 +22,8 @@ var upgrader = websocket.Upgrader{
 }
 
 type Whiteboard struct {
-	Image      draw.Image
-	Rasterizer *vector.Rasterizer
+	Image     draw.Image
+	RenderCtx *draw2dimg.GraphicContext
 }
 
 func handler(addClient, removeClient chan *Client, recv chan Packet) func(http.ResponseWriter, *http.Request) {
@@ -93,9 +93,11 @@ func main() {
 }
 
 func SpawnWhiteboard(boardId string) {
+	img := image.NewRGBA(image.Rect(0, 0, 800, 500))
 	board := &Whiteboard{
-		Image:      image.NewNRGBA(image.Rect(0, 0, 800, 500)),
-		Rasterizer: vector.NewRasterizer(800, 500),
+		Image: img,
+		//Rasterizer: vector.NewRasterizer(800, 500),
+		RenderCtx: draw2dimg.NewGraphicContext(img),
 	}
 
 	board.Clear()
@@ -146,24 +148,19 @@ func SpawnWhiteboard(boardId string) {
 	http.HandleFunc("/draw/ws/"+boardId, handler(addClient, removeClient, recvPacket))
 }
 
-func parseColor(s string, alpha uint8) (color.NRGBA, error) {
+func parseColor(s string, alpha uint8) (color.RGBA, error) {
 	x, err := strconv.ParseUint(s[1:], 16, 32)
 
 	if err != nil {
-		return color.NRGBA{}, err
+		return color.RGBA{}, err
 	}
 
-	return color.NRGBA{
+	return color.RGBA{
 		R: uint8((x >> 16) & 0xFF),
 		G: uint8((x >> 8) & 0xFF),
 		B: uint8(x & 0xFF),
 		A: alpha,
 	}, nil
-}
-
-func Atof(s string) (float32, error) {
-	x, err := strconv.ParseFloat(s, 32)
-	return float32(x), err
 }
 
 func (board *Whiteboard) Update(pkt []byte) error {
@@ -183,27 +180,27 @@ func (board *Whiteboard) Update(pkt []byte) error {
 			return err
 		}
 
-		width, err := Atof(parts[2])
+		width, err := strconv.ParseFloat(parts[2], 64)
 		if err != nil {
 			return err
 		}
 
-		x0, err := Atof(parts[3])
+		x0, err := strconv.ParseFloat(parts[3], 64)
 		if err != nil {
 			return err
 		}
 
-		y0, err := Atof(parts[4])
+		y0, err := strconv.ParseFloat(parts[4], 64)
 		if err != nil {
 			return err
 		}
 
-		x1, err := Atof(parts[5])
+		x1, err := strconv.ParseFloat(parts[5], 64)
 		if err != nil {
 			return err
 		}
 
-		y1, err := Atof(parts[6])
+		y1, err := strconv.ParseFloat(parts[6], 64)
 		if err != nil {
 			return err
 		}
@@ -214,82 +211,70 @@ func (board *Whiteboard) Update(pkt []byte) error {
 			return errors.New("Malformed ERASE command")
 		}
 
-		width, err := Atof(parts[1])
+		width, err := strconv.ParseFloat(parts[1], 64)
 		if err != nil {
 			return err
 		}
 
-		x0, err := Atof(parts[2])
+		x0, err := strconv.ParseFloat(parts[2], 64)
 		if err != nil {
 			return err
 		}
 
-		y0, err := Atof(parts[3])
+		y0, err := strconv.ParseFloat(parts[3], 64)
 		if err != nil {
 			return err
 		}
 
-		x1, err := Atof(parts[4])
+		x1, err := strconv.ParseFloat(parts[4], 64)
 		if err != nil {
 			return err
 		}
 
-		y1, err := Atof(parts[5])
+		y1, err := strconv.ParseFloat(parts[5], 64)
 		if err != nil {
 			return err
 		}
 
-		board.DrawStroke(color.NRGBA{255, 255, 255, 255}, width, x0, y0, x1, y1)
+		board.DrawStroke(color.RGBA{255, 255, 255, 255}, width, x0, y0, x1, y1)
 	}
 
 	return nil
 }
 
-func (board *Whiteboard) DrawStroke(col color.NRGBA, width float32, x0, y0, x1, y1 float32) {
-	srcImg := image.NewUniform(col)
-	Line(board.Rasterizer, x0, y0, x1, y1, width)
-	board.Rasterizer.Draw(board.Image, board.Rasterizer.Bounds(), srcImg, image.Point{})
-	board.Rasterizer.Reset(800, 500)
-	Circle(board.Rasterizer, x0, y0, width/2)
-	board.Rasterizer.Draw(board.Image, board.Rasterizer.Bounds(), srcImg, image.Point{})
-	board.Rasterizer.Reset(800, 500)
-	Circle(board.Rasterizer, x1, y1, width/2)
-	board.Rasterizer.Draw(board.Image, board.Rasterizer.Bounds(), srcImg, image.Point{})
-	board.Rasterizer.Reset(800, 500)
-}
+func (board *Whiteboard) DrawStroke(col color.RGBA, width float64, x0, y0, x1, y1 float64) {
+	// TODO: clean up drawing (one path?)
+	board.RenderCtx.SetFillColor(col)
+	board.RenderCtx.SetStrokeColor(col)
+	board.RenderCtx.SetLineWidth(width)
 
-func Circle(z *vector.Rasterizer, x, y, r float32) {
-	c := float32(0.551915024494)
-	z.MoveTo(x, y+r)
-	z.CubeTo(x+r*c, y+r, x+r, y+r*c, x+r, y)
-	z.CubeTo(x+r, y-r*c, x+r*c, y-r, x, y-r)
-	z.CubeTo(x-r*c, y-r, x-r, y-r*c, x-r, y)
-	z.CubeTo(x-r, y+r*c, x-r*c, y+r, x, y+r)
-	z.ClosePath()
-}
+	board.RenderCtx.BeginPath()
+	board.RenderCtx.MoveTo(x0, y0)
+	board.RenderCtx.LineTo(x1, y1)
+	board.RenderCtx.Close()
+	board.RenderCtx.Stroke()
 
-func Line(z *vector.Rasterizer, x0, y0, x1, y1, width float32) {
-	tx := y0 - y1
-	ty := x1 - x0
-	mul := width / 2 / float32(math.Hypot(float64(tx), float64(ty)))
-	tx *= mul
-	ty *= mul
+	board.RenderCtx.BeginPath()
+	board.RenderCtx.ArcTo(x0, y0, width/2, width/2, 0, 2*math.Pi)
+	board.RenderCtx.Close()
+	board.RenderCtx.Fill()
 
-	z.MoveTo(x0-tx, y0-ty)
-	z.LineTo(x1-tx, y1-ty)
-	z.LineTo(x1+tx, y1+ty)
-	z.LineTo(x0+tx, y0+ty)
-	z.ClosePath()
+	board.RenderCtx.BeginPath()
+	board.RenderCtx.ArcTo(x1, y1, width/2, width/2, 0, 2*math.Pi)
+	board.RenderCtx.Close()
+	board.RenderCtx.Fill()
 }
 
 func (board *Whiteboard) Clear() {
-	srcImg := image.NewUniform(color.NRGBA{255, 255, 255, 255})
-	z := board.Rasterizer
-	z.MoveTo(0, 0)
-	z.LineTo(800, 0)
-	z.LineTo(800, 600)
-	z.LineTo(0, 600)
-	z.ClosePath()
-	z.Draw(board.Image, z.Bounds(), srcImg, image.Point{})
-	z.Reset(800, 500)
+	rc := board.RenderCtx
+	rc.SetStrokeColor(color.RGBA{255, 255, 255, 255})
+	rc.SetFillColor(color.RGBA{255, 255, 255, 255})
+	rc.SetLineWidth(0)
+	rc.BeginPath()
+	rc.MoveTo(0, 0)
+	rc.LineTo(800, 0)
+	rc.LineTo(800, 600)
+	rc.LineTo(0, 600)
+	rc.Close()
+	rc.FillStroke()
 }
