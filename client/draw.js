@@ -5,7 +5,7 @@ const DrawMode = {
 };
 
 function makeDrawContext(canvas, cursorCanvas) {
-	let sock = new WebSocket("wss://" + location.host + "/draw/ws");
+	let sock = new WebSocket("wss://" + location.host + "/draw/ws/foo");
 
 	let ctx = {
 		drawCtx:   canvas.getContext("2d"),
