@@ -16,7 +16,7 @@ function makeDrawContext(canvas, cursorCanvas) {
 		forceMode: DrawMode.NONE,
 		drawSize:  document.getElementById("drawSize").value,
 		eraseSize: document.getElementById("eraseSize").value,
-		history: [],
+		//history: [],
 		width:  canvas.width,
 		height: canvas.height,
 		socket: sock,
@@ -31,13 +31,13 @@ function sockMsg(ctx, msg) {
 	const parts = msg.split(" ");
 	switch (parts[0]) {
 		case "PUSH_HISTORY":
-			ctx.history.push(ctx.drawCtx.getImageData(0, 0, ctx.width, ctx.height));
+			//ctx.history.push(ctx.drawCtx.getImageData(0, 0, ctx.width, ctx.height));
 			break;
 		case "POP_HISTORY":
-			ctx.drawCtx.putImageData(ctx.history.pop(), 0, 0);
+			//ctx.drawCtx.putImageData(ctx.history.pop(), 0, 0);
 			break;
 		case "CLEAR":
-			ctx.history = [];
+			//ctx.history = [];
 			ctx.drawCtx.clearRect(0, 0, ctx.width, ctx.height);
 			break;
 		case "DRAW":
@@ -103,7 +103,7 @@ function clearLine(ctx, pressure, x0, y0, x1, y1) {
 
 function clear(ctx) {
 	ctx.socket.send("CLEAR");
-	ctx.history = [];
+	//ctx.history = [];
 	ctx.drawCtx.clearRect(0, 0, ctx.width, ctx.height);
 }
 
@@ -113,15 +113,18 @@ function setColor(ctx, c) {
 }
 
 function undo(ctx) {
+	/*
 	if (ctx.history.length != 0) {
 		ctx.socket.send("POP_HISTORY");
 		const img = ctx.history.pop();
 		ctx.drawCtx.putImageData(img, 0, 0);
 	}
+	*/
+	alert("Not yet supported!");
 }
 
 function startDraw(ctx, pressure, x, y, mode) {
-	ctx.socket.send("PUSH_HISTORY");
+	//ctx.socket.send("PUSH_HISTORY");
 	ctx.history.push(ctx.drawCtx.getImageData(0, 0, ctx.width, ctx.height));
 
 	if (ctx.forceMode == DrawMode.NONE) {
