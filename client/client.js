@@ -62,4 +62,10 @@ document.getElementById("undo").addEventListener("click", e => undo(ctx));
 // Don't open the context menu in the canvas (allows for rmb erase)
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 
+document.addEventListener("keydown", e => {
+	if (e.ctrlKey && e.key == 'z') {
+		undo(ctx);
+	}
+});
+
 // }}}
