@@ -80,7 +80,7 @@ function sockMsg(ctx, msg) {
 		const x1 = view.getUint16(5);
 		const y1 = view.getUint16(7);
 		const width = view.getFloat32(9);
-		erasePacket(ctx, width, x0, y0, x1, y1);
+		drawPacket(ctx, '#FFFFFF', width, x0, y0, x1, y1);
 	}
 }
 
@@ -88,16 +88,6 @@ function drawPacket(ctx, c, w, x0, y0, x1, y1) {
 	ctx.drawCtx.save();
 
 	setColor(ctx, c);
-	ctx.drawCtx.globalCompositeOperation = "source-over";
-	canvasLine(ctx.drawCtx, w, x0, y0, x1, y1);
-
-	ctx.drawCtx.restore();
-}
-
-function erasePacket(ctx, w, x0, y0, x1, y1) {
-	ctx.drawCtx.save();
-
-	ctx.drawCtx.globalCompositeOperation = "destination-out";
 	canvasLine(ctx.drawCtx, w, x0, y0, x1, y1);
 
 	ctx.drawCtx.restore();
@@ -204,7 +194,6 @@ function drawLine(ctx, pressure, x0, y0, x1, y1) {
 		DataType.U8,  color[2],
 		DataType.U8,  255,
 	]);
-	ctx.drawCtx.globalCompositeOperation = "source-over";
 	canvasLine(ctx.drawCtx, width, x0, y0, x1, y1);
 }
 
@@ -218,8 +207,10 @@ function clearLine(ctx, pressure, x0, y0, x1, y1) {
 		DataType.U16, y1,
 		DataType.F32, width,
 	]);
-	ctx.drawCtx.globalCompositeOperation = "destination-out";
+	ctx.drawCtx.save();
+	setColor(ctx, '#FFFFFF');
 	canvasLine(ctx.drawCtx, width, x0, y0, x1, y1);
+	ctx.drawCtx.restore();
 }
 
 // }}}
