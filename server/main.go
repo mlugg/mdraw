@@ -154,24 +154,6 @@ func SpawnWhiteboard(boardId string) {
 		}
 	}()
 
-	// XXX TEMPORARY
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			<-ticker.C
-			f, err := os.Create("output.png")
-			if err != nil {
-				panic(err)
-			}
-
-			png.Encode(f, board.Image)
-
-			defer f.Close()
-			println("made image")
-		}
-	}()
-
 	http.HandleFunc("/draw/ws/"+boardId, handler(addClient, removeClient, recvPacket))
 }
 
