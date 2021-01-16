@@ -1,49 +1,62 @@
 const canvas = document.getElementById("drawCanvas");
 const cursorCanvas = document.getElementById("cursorCanvas");
 
-var ctx = makeDrawContext(canvas, cursorCanvas);
+var ctx = makeDrawContext(canvas, cursorCanvas, enableDraw, disableDraw);
 
 // Input {{{
 
 // Drawing {{{
 
-function ptrPressure(e) {
-	if (e.pressure == 0.5) return 1; // Device does not support pressure
-	return e.pressure;
-}
-
-canvas.addEventListener("pointerdown", e => {
+function canvasPtrDown(e) {
 	if (ctx.curMode != DrawMode.NONE) return;
 	const p = ptrPressure(e);
 	startDraw(ctx, p, ctx.x, ctx.y, e.button == 0 ? DrawMode.DRAW : DrawMode.ERASE);
 	doToolOverlay(ctx, p);
-});
+}
 
 // When the mouse is moved, run the handler for the current mode, and
 // update the cursor
-canvas.addEventListener("pointermove", e => {
+function canvasPtrMove(e) {
 	const p = ptrPressure(e);
 	const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [e];
 	for (const ev of events) {
 		doMove(ctx, p, ev.offsetX, ev.offsetY);
 	}
 	doToolOverlay(ctx, p);
-});
+}
 
-// If the mouse is released *anywhere*, cancel drawing
-canvas.addEventListener("pointerup", e => {
+function canvasPtrUp(e) {
 	const p = ptrPressure(e);
 	endDraw(ctx);
 	doToolOverlay(ctx, p);
-});
+}
 
-
-canvas.addEventListener("lostpointercapture", e => lostPointer());
-canvas.addEventListener("pointerleave", e => lostPointer());
-
-function lostPointer() {
+function lostPointer(e) {
 	endDraw(ctx);
 	clearToolOverlay(ctx);
+}
+
+
+function ptrPressure(e) {
+	if (e.pressure == 0.5) return 1; // Device does not support pressure
+	return e.pressure;
+}
+
+function enableDraw(ctx) {
+	canvas.addEventListener("pointerdown", canvasPtrDown);
+	canvas.addEventListener("pointermove", canvasPtrMove);
+	canvas.addEventListener("pointerup", canvasPtrUp);
+	canvas.addEventListener("lostpointercapture", lostPointer);
+	canvas.addEventListener("pointerleave", lostPointer);
+}
+
+function disableDraw(ctx) {
+	ctx.drawCtx.clearRect(0,0, ctx.width, ctx.height);
+	canvas.removeEventListener("pointerdown", canvasPtrDown);
+	canvas.removeEventListener("pointermove", canvasPtrMove);
+	canvas.removeEventListener("pointerup", canvasPtrUp);
+	canvas.removeEventListener("lostpointercapture", lostPointer);
+	canvas.removeEventListener("pointerleave", lostPointer);
 }
 
 // }}}

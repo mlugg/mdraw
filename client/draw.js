@@ -10,7 +10,7 @@ const DataType = {
 	F32: 2,
 };
 
-function makeDrawContext(canvas, cursorCanvas) {
+function makeDrawContext(canvas, cursorCanvas, enableFunc, disableFunc) {
 	let sock = new WebSocket("wss://" + location.host + "/draw/ws/foo");
 	sock.binaryType = "arraybuffer";
 
@@ -31,7 +31,14 @@ function makeDrawContext(canvas, cursorCanvas) {
 
 	sock.addEventListener("message", e => sockMsg(ctx, e.data));
 
-	sock.addEventListener("open", e => sync(ctx));
+	sock.addEventListener("close", e => {
+		disableFunc(ctx)
+	});
+
+	sock.addEventListener("open", e => {
+		enableFunc(ctx);
+		sync(ctx)
+	});
 
 	return ctx;
 }
@@ -42,7 +49,7 @@ function sockMsg(ctx, msg) {
 
 	if (cmd == 0x00) { // CLEAR
 		//ctx.history = [];
-		ctx.drawCtx.clearRect(0, 0, ctx.width, ctx.height);
+		clearCanvas(ctx);
 	}
 
 	if (cmd == 0x02) { // SYNC_DATA
@@ -220,7 +227,14 @@ function clearLine(ctx, pressure, x0, y0, x1, y1) {
 function clear(ctx) {
 	sendData(ctx, [DataType.U8, 0x00]);
 	//ctx.history = [];
-	ctx.drawCtx.clearRect(0, 0, ctx.width, ctx.height);
+	clearCanvas(ctx);
+}
+
+function clearCanvas(ctx) {
+	ctx.drawCtx.save();
+	ctx.drawCtx.fillStyle = '#FFFFFF';
+	ctx.drawCtx.fillRect(0,0,ctx.width,ctx.height);
+	ctx.drawCtx.restore();
 }
 
 function setColor(ctx, c) {

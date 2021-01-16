@@ -10,6 +10,7 @@ body {
 #drawCanvas {
 	z-index: 1;
 	touch-action: none;
+	background: #bbb;
 }
 
 #cursorCanvas {
