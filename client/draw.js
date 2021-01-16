@@ -31,25 +31,49 @@ function makeDrawContext(canvas, cursorCanvas) {
 
 	sock.addEventListener("message", e => sockMsg(ctx, e.data));
 
+	sock.addEventListener("open", e => sync(ctx));
+
 	return ctx;
 }
 
 function sockMsg(ctx, msg) {
-	const bytes = new Uint8Array(msg);
-	switch (bytes[0]) {
-		case 0x00: // CLEAR
-			//ctx.history = [];
-			ctx.drawCtx.clearRect(0, 0, ctx.width, ctx.height);
-			break;
-		case 0x01: // DRAW
-			//drawPacket(ctx, parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]);
-			break;
-		case 0x02: // ERASE
-			//erasePacket(ctx, parts[1], parts[2], parts[3], parts[4], parts[5]);
-			break;
-		case 0x04: // SYNC_DATA
-			console.log("got png data");
-			break;
+	const view = new DataView(msg);
+	const cmd = view.getUint8(0);
+
+	if (cmd == 0x00) { // CLEAR
+		//ctx.history = [];
+		ctx.drawCtx.clearRect(0, 0, ctx.width, ctx.height);
+	}
+
+	if (cmd == 0x02) { // SYNC_DATA
+		const b64 = btoa(String.fromCharCode(...new Uint8Array(msg.slice(1))));
+		let img = new Image();
+		img.src = "data:image/png;base64," + b64;
+		img.onload = () => {
+			ctx.drawCtx.drawImage(img, 0, 0);
+		};
+	}
+
+	if (cmd == 0x03) { // DRAW
+		const x0 = view.getUint16(1);
+		const y0 = view.getUint16(3);
+		const x1 = view.getUint16(5);
+		const y1 = view.getUint16(7);
+		const width = view.getFloat32(9);
+		const r = view.getUint8(13);
+		const g = view.getUint8(14);
+		const b = view.getUint8(15);
+		const a = view.getUint8(16) / 255;
+		drawPacket(ctx, `rgba(${r},${g},${b},${a})`, width, x0, y0, x1, y1);
+	}
+
+	if (cmd == 0x04) { // ERASE
+		const x0 = view.getUint16(1);
+		const y0 = view.getUint16(3);
+		const x1 = view.getUint16(5);
+		const y1 = view.getUint16(7);
+		const width = view.getFloat32(9);
+		erasePacket(ctx, width, x0, y0, x1, y1);
 	}
 }
 
@@ -114,6 +138,10 @@ function sendData(ctx, vals) {
 	}
 
 	ctx.socket.send(buf);
+}
+
+function sync(ctx) {
+	sendData(ctx, [DataType.U8, 0x01]);
 }
 
 // Drawing functions {{{
