@@ -1,7 +1,9 @@
 package main
 
 import (
-	"errors"
+	"io"
+	"bytes"
+	"encoding/binary"
 	"github.com/gorilla/websocket"
 	"github.com/llgcode/draw2d/draw2dimg"
 	"image"
@@ -12,8 +14,6 @@ import (
 	"math"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -26,7 +26,7 @@ type Whiteboard struct {
 	RenderCtx *draw2dimg.GraphicContext
 }
 
-func handler(addClient, removeClient chan *Client, recv chan Packet) func(http.ResponseWriter, *http.Request) {
+func handler(addClient, removeClient chan *Client, recv chan InPacket) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -38,8 +38,9 @@ func handler(addClient, removeClient chan *Client, recv chan Packet) func(http.R
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		send := make(chan Packet, 5)
-		cl := &Client{send}
+		send := make(chan OutPacket, 5)
+		recvDone := make(chan struct{})
+		cl := &Client{send, recvDone}
 
 		running := true
 
@@ -51,15 +52,16 @@ func handler(addClient, removeClient chan *Client, recv chan Packet) func(http.R
 
 		go func() {
 			for {
-				msgType, msg, err := conn.ReadMessage()
+				msgType, msgRead, err := conn.NextReader()
 				if err != nil {
 					log.Println(err)
 					running = false
 					return
 				}
 
-				if msgType == websocket.TextMessage {
-					recv <- Packet{cl, msg}
+				if msgType == websocket.BinaryMessage {
+					recv <- InPacket{cl, msgRead}
+					<-recvDone
 				}
 			}
 		}()
@@ -67,7 +69,9 @@ func handler(addClient, removeClient chan *Client, recv chan Packet) func(http.R
 		for running {
 			select {
 			case p := <-send:
-				if p.Client != cl {
+				if p.IsBinary {
+					conn.WriteMessage(websocket.BinaryMessage, p.Data)
+				} else {
 					conn.WriteMessage(websocket.TextMessage, p.Data)
 				}
 			case <-ticker.C:
@@ -78,12 +82,18 @@ func handler(addClient, removeClient chan *Client, recv chan Packet) func(http.R
 }
 
 type Client struct {
-	Send chan Packet
+	Send     chan OutPacket
+	RecvDone chan struct{}
 }
 
-type Packet struct {
+type InPacket struct {
 	Client *Client
-	Data   []byte
+	Reader io.Reader
+}
+
+type OutPacket struct {
+	IsBinary bool
+	Data []byte
 }
 
 func main() {
@@ -96,7 +106,6 @@ func SpawnWhiteboard(boardId string) {
 	img := image.NewRGBA(image.Rect(0, 0, 800, 500))
 	board := &Whiteboard{
 		Image: img,
-		//Rasterizer: vector.NewRasterizer(800, 500),
 		RenderCtx: draw2dimg.NewGraphicContext(img),
 	}
 
@@ -104,21 +113,39 @@ func SpawnWhiteboard(boardId string) {
 
 	addClient := make(chan *Client, 4)
 	removeClient := make(chan *Client, 4)
-	recvPacket := make(chan Packet, 16)
+	recvPacket := make(chan InPacket, 16)
 
 	go func() {
 		clients := make(map[*Client]struct{})
 		for {
 			select {
 			case p := <-recvPacket:
-				err := board.Update(p.Data)
-				if err == nil {
-					for cl := range clients {
-						cl.Send <- p
+				var cmd byte
+				if err := binary.Read(p.Reader, binary.BigEndian, &cmd); err != nil {
+					log.Println("Error reading: ", err)
+				} else if cmd == 0x01 { // REQUEST SYNC
+					b := bytes.NewBuffer([]byte{0x02}); // SYNC DATA
+					if err := png.Encode(b, board.Image); err != nil {
+						log.Println("Failed to encode board image as PNG:", err)
+					} else {
+						p.Client.Send <- OutPacket{true, b.Bytes()}
 					}
 				} else {
-					log.Println("Malformed command:", err)
+					b := bytes.NewBuffer([]byte{cmd})
+					r := io.TeeReader(p.Reader, b)
+					if err := board.Update(cmd, r); err == nil {
+						data := b.Bytes()
+						for cl := range clients {
+							if cl != p.Client {
+								cl.Send <- OutPacket{true, data}
+							}
+						}
+					} else {
+						log.Println("Malformed command:", err)
+					}
 				}
+
+				p.Client.RecvDone <- struct{}{}
 			case cl := <-addClient:
 				clients[cl] = struct{}{}
 			case cl := <-removeClient:
@@ -148,95 +175,39 @@ func SpawnWhiteboard(boardId string) {
 	http.HandleFunc("/draw/ws/"+boardId, handler(addClient, removeClient, recvPacket))
 }
 
-func parseColor(s string, alpha uint8) (color.RGBA, error) {
-	x, err := strconv.ParseUint(s[1:], 16, 32)
+func (board *Whiteboard) Update(cmd byte, r io.Reader) error {
+	switch cmd {
+	case 0x00: // CLEAR
+		board.Clear()
 
-	if err != nil {
-		return color.RGBA{}, err
-	}
-
-	return color.RGBA{
-		R: uint8((x >> 16) & 0xFF),
-		G: uint8((x >> 8) & 0xFF),
-		B: uint8(x & 0xFF),
-		A: alpha,
-	}, nil
-}
-
-func (board *Whiteboard) Update(pkt []byte) error {
-	parts := strings.Split(string(pkt), " ")
-	if parts == nil {
-		return errors.New("Empty command given")
-	}
-
-	switch parts[0] {
-	case "DRAW":
-		if len(parts) != 7 {
-			return errors.New("Malformed DRAW command")
+	case 0x03: // DRAW
+		var pkt struct {
+			X0, Y0, X1, Y1 uint16
+			Width float32
+			R, G, B, A uint8
 		}
 
-		color, err := parseColor(parts[1], 255)
-		if err != nil {
+		if err := binary.Read(r, binary.BigEndian, &pkt); err != nil {
 			return err
 		}
 
-		width, err := strconv.ParseFloat(parts[2], 64)
-		if err != nil {
+		col := color.RGBA{pkt.R, pkt.G, pkt.B, pkt.A}
+
+		board.DrawStroke(col, float64(pkt.Width), float64(pkt.X0), float64(pkt.Y0), float64(pkt.X1), float64(pkt.Y1))
+
+	case 0x04: // ERASE
+		var pkt struct {
+			X0, Y0, X1, Y1 uint16
+			Width float32
+		}
+
+		if err := binary.Read(r, binary.BigEndian, &pkt); err != nil {
 			return err
 		}
 
-		x0, err := strconv.ParseFloat(parts[3], 64)
-		if err != nil {
-			return err
-		}
+		col := color.RGBA{255, 255, 255, 255}
 
-		y0, err := strconv.ParseFloat(parts[4], 64)
-		if err != nil {
-			return err
-		}
-
-		x1, err := strconv.ParseFloat(parts[5], 64)
-		if err != nil {
-			return err
-		}
-
-		y1, err := strconv.ParseFloat(parts[6], 64)
-		if err != nil {
-			return err
-		}
-
-		board.DrawStroke(color, width, x0, y0, x1, y1)
-	case "ERASE":
-		if len(parts) != 6 {
-			return errors.New("Malformed ERASE command")
-		}
-
-		width, err := strconv.ParseFloat(parts[1], 64)
-		if err != nil {
-			return err
-		}
-
-		x0, err := strconv.ParseFloat(parts[2], 64)
-		if err != nil {
-			return err
-		}
-
-		y0, err := strconv.ParseFloat(parts[3], 64)
-		if err != nil {
-			return err
-		}
-
-		x1, err := strconv.ParseFloat(parts[4], 64)
-		if err != nil {
-			return err
-		}
-
-		y1, err := strconv.ParseFloat(parts[5], 64)
-		if err != nil {
-			return err
-		}
-
-		board.DrawStroke(color.RGBA{255, 255, 255, 255}, width, x0, y0, x1, y1)
+		board.DrawStroke(col, float64(pkt.Width), float64(pkt.X0), float64(pkt.Y0), float64(pkt.X1), float64(pkt.Y1))
 	}
 
 	return nil
